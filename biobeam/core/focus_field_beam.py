@@ -30,7 +30,18 @@ def absPath(myPath):
         return os.path.join(base_path, os.path.basename(myPath))
     except Exception:
         base_path = os.path.abspath(os.path.dirname(__file__))
-        return os.path.join(base_path, myPath)
+        full_path = os.path.join(base_path, myPath)
+        # Convert to short path (8.3 format) on Windows to avoid issues with non-ASCII characters
+        if sys.platform == 'win32':
+            try:
+                import win32api
+                short_path = win32api.GetShortPathName(full_path)
+                return short_path
+            except (ImportError, AttributeError, OSError):
+                # If win32api is not available or conversion fails, return original path
+                # User may need to move project to path without non-ASCII characters
+                pass
+        return full_path
 
 
 def focus_field_beam(shape = (128,128,128),
@@ -89,8 +100,29 @@ def focus_field_beam(shape = (128,128,128),
     """
 
 
-    p = OCLProgram(absPath("kernels/psf_debye.cl"),
-            build_options = ["-I",absPath("kernels"),"-D","INT_STEPS=%s"%n_integration_steps])
+    # Get paths and convert to short paths on Windows to avoid OpenCL compiler issues with non-ASCII characters
+    kernel_path = absPath("kernels/psf_debye.cl")
+    kernel_dir = absPath("kernels")
+    
+    # Ensure paths are properly formatted for OpenCL compiler
+    build_options = ["-I", kernel_dir, "-D", "INT_STEPS=%s" % n_integration_steps]
+    
+    try:
+        p = OCLProgram(kernel_path, build_options=build_options)
+    except RuntimeError as e:
+        # Provide more helpful error message
+        error_msg = str(e)
+        if "INVALID_VALUE" in error_msg or "clBuildProgram failed" in error_msg:
+            raise RuntimeError(
+                f"OpenCL 编译失败。可能的原因：\n"
+                f"1. 路径中包含非 ASCII 字符（如中文），OpenCL 编译器可能无法处理\n"
+                f"2. 内核文件路径: {kernel_path}\n"
+                f"3. 包含目录: {kernel_dir}\n"
+                f"4. 建议：将项目移动到不包含中文字符的路径，或安装 pywin32 以使用短路径名\n"
+                f"原始错误: {error_msg}"
+            ) from e
+        else:
+            raise
 
     if np.isscalar(NA):
         NA = [0.,NA]
