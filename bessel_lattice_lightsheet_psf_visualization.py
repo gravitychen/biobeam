@@ -40,19 +40,20 @@ from biobeam.core.focus_field_beam import focus_field_beam
 
 # 设置参数
 shape = (128, 128, 128)  # (Nx, Ny, Nz) - 注意：bessel lattice 在 yz 平面
+shape = (52, 52, 52)  # (Nx, Ny, Nz) - 注意：cylindrical lens 在 yz 平面
 units = (0.1, 0.1, 0.1)  # (dx, dy, dz) 单位：微米
 
 # 激发参数（Bessel Lattice）
 lam_excitation = 0.488  # 激发波长（微米）
 NA1_excitation = 0.44   # 激发内环数值孔径
-NA2_excitation = 0.55  # 激发外环数值孔径
+NA2_excitation = 0.58  # 激发外环数值孔径
 sigma_excitation = 0.1  # 高斯模糊标准差（sigma 越大，光片在 y 方向越紧）
 kpoints_excitation = 6  # 格子点数（例如 6 表示六边形格子，4 表示方形格子）
 n0 = 1.33               # 介质折射率
 
 # 检测参数
 lam_detection = 0.525    # 检测波长（微米）
-NA_detection = 0.7       # 检测数值孔径
+NA_detection = 0.9       # 检测数值孔径
 
 print("参数设置完成")
 print(f"形状: {shape}")
@@ -202,7 +203,18 @@ print(f"Effective PSF 形状: {psf_effective.shape}")
 print(f"Effective PSF 最大值: {psf_effective.max():.4f}")
 print(f"Effective PSF 最小值: {psf_effective.min():.4f}")
 
+# 保存 Effective PSF 到文件
+import os
+from tifffile import imwrite
 
+psfdata_dir = 'psfdata'
+os.makedirs(psfdata_dir, exist_ok=True)
+output_file = os.path.join(psfdata_dir, 'bessel_lattice_lightsheet_effective_psf.tif')
+print(f"正在保存 Effective PSF 到: {output_file}")
+imwrite(output_file, psf_effective.astype(np.float32),imagej=True)
+print(f"保存完成！文件: {output_file}")
+
+assert 1==2
 # ## 4. 可视化 PSF - 3x2 组合可视化
 # 
 # 创建一个 3x2 的子图布局：
