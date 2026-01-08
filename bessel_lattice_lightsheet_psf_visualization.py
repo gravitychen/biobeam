@@ -39,9 +39,9 @@ from biobeam.core.focus_field_lattice import focus_field_lattice
 from biobeam.core.focus_field_beam import focus_field_beam
 
 # 设置参数
-shape = (128, 128, 128)  # (Nx, Ny, Nz) - 注意：bessel lattice 在 yz 平面
+# shape = (128, 128, 128)  # (Nx, Ny, Nz) - 注意：bessel lattice 在 yz 平面
 shape = (52, 52, 52)  # (Nx, Ny, Nz) - 注意：cylindrical lens 在 yz 平面
-units = (0.1, 0.1, 0.1)  # (dx, dy, dz) 单位：微米
+units = (0.1, 0.1, 0.1)  # (dx, dy, dz) 单位：微米 micrometers
 
 # 激发参数（Bessel Lattice）
 lam_excitation = 0.488  # 激发波长（微米）

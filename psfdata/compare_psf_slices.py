@@ -10,16 +10,16 @@ import matplotlib.pyplot as plt
 from tifffile import imread
 import os
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+# 设置字体为 Liberation
+plt.rcParams['font.sans-serif'] = ['Liberation Sans', 'Liberation Serif', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 # PSF 文件路径
 psf_files = {
     'Cylindrical Lightsheet': 'cylindrical_lightsheet_effective_psf.tif',
     'Bessel Lattice Lightsheet': 'bessel_lattice_lightsheet_effective_psf.tif',
-    'Confocal': 'confocal_3d.tif',
-    'Widefield': 'widefield_3d.tif'
+    'Confocal': 'confocal_psf.tif',
+    'Widefield': 'widefield_effective.tif'
 }
 
 # 获取脚本所在目录
@@ -59,9 +59,20 @@ for name, psf in psf_data.items():
     # XZ 平面：固定 Y，取 (Z, X)
     slice_xz = psf[:, center_y, :]
     
-    # 应用对数变换：log(psf_data + 1)
-    slices_xy[name] = np.log1p(slice_xy)
-    slices_xz[name] = np.log1p(slice_xz)
+    # 先应用 log1p 变换，然后 Min-Max 归一化到 0-1 范围
+    def min_max_norm(data):
+        data_min = data.min()
+        data_max = data.max()
+        if data_max > data_min:
+            return (data - data_min) / (data_max - data_min)
+        else:
+            return data
+    
+    # 先 log1p，再归一化
+    slice_xy_log = np.log1p(slice_xy)
+    slice_xz_log = np.log1p(slice_xz)
+    slices_xy[name] = min_max_norm(slice_xy_log)
+    slices_xz[name] = min_max_norm(slice_xz_log)
     print(f"{name}:")
     print(f"  XY 截面形状: {slice_xy.shape}")
     print(f"  XZ 截面形状: {slice_xz.shape}")
@@ -72,34 +83,30 @@ print("\n正在生成比较可视化...")
 n_psfs = len(psf_data)
 fig, axes = plt.subplots(2, n_psfs, figsize=(5*n_psfs, 10))
 
-# 设置颜色范围（使用对数变换后的数据）
-vmax_xy = max([s.max() for s in slices_xy.values()])
-vmax_xz = max([s.max() for s in slices_xz.values()])
-
-# 使用归一化的颜色范围，便于比较
-vmax_xy_norm = vmax_xy * 0.8  # 使用 80% 的最大值，避免极值影响显示
-vmax_xz_norm = vmax_xz * 0.8
+# 设置颜色范围（已归一化到 0-1，直接使用 1.0）
+vmax_xy_norm = 1.0
+vmax_xz_norm = 1.0
 
 for idx, (name, psf) in enumerate(psf_data.items()):
     # XY 截面（第一行）
     ax_xy = axes[0, idx]
-    im_xy = ax_xy.imshow(slices_xy[name], cmap='hot', vmax=vmax_xy_norm, aspect='auto', origin='lower')
-    ax_xy.set_title(f'{name}\nXY 截面 (Z=0, Log Scale)', fontsize=12, fontweight='bold')
-    ax_xy.set_xlabel('X (像素)')
-    ax_xy.set_ylabel('Y (像素)')
-    plt.colorbar(im_xy, ax=ax_xy, fraction=0.046, pad=0.04, label='log(强度+1)')
+    im_xy = ax_xy.imshow(slices_xy[name], cmap='turbo', vmax=vmax_xy_norm, aspect='auto', origin='lower')
+    ax_xy.set_title(f'{name} PSF\nXY Slice', fontsize=12, fontweight='bold')
+    ax_xy.set_xlabel('X (pixels)')
+    ax_xy.set_ylabel('Y (pixels)')
+    plt.colorbar(im_xy, ax=ax_xy, fraction=0.046, pad=0.04, label='Normalized Intensity (0-1)')
     
     # XZ 截面（第二行）
     ax_xz = axes[1, idx]
-    im_xz = ax_xz.imshow(slices_xz[name], cmap='hot', vmax=vmax_xz_norm, aspect='auto', origin='lower')
-    ax_xz.set_title(f'{name}\nXZ 截面 (Y=0, Log Scale)', fontsize=12, fontweight='bold')
-    ax_xz.set_xlabel('X (像素)')
-    ax_xz.set_ylabel('Z (像素)')
-    plt.colorbar(im_xz, ax=ax_xz, fraction=0.046, pad=0.04, label='log(强度+1)')
+    im_xz = ax_xz.imshow(slices_xz[name], cmap='turbo', vmax=vmax_xz_norm, aspect='auto', origin='lower')
+    ax_xz.set_title(f'XZ Slice', fontsize=12, fontweight='bold')
+    ax_xz.set_xlabel('X (pixels)')
+    ax_xz.set_ylabel('Z (pixels)')
+    plt.colorbar(im_xz, ax=ax_xz, fraction=0.046, pad=0.04, label='Normalized Intensity (0-1)')
 
 plt.tight_layout()
-plt.suptitle('PSF 截面比较 - Detection Objective 坐标系 (对数尺度)\nZ 是光轴，XY 是横向平面', 
-             fontsize=14, y=0.995)
+# plt.suptitle('PSF Slice Comparison - Detection Objective Coordinate System (Log1p + Min-Max Normalized 0-1)\nZ is optical axis, XY is lateral plane', 
+#              fontsize=14, y=0.995)
 
 # 保存图像
 output_file = os.path.join(script_dir, 'psf_slices_comparison.png')
