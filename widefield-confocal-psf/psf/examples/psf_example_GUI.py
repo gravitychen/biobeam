@@ -257,12 +257,12 @@ def psf_example(
         print('center cropped widefield psf shape: ', wf_em_cropped.shape)
         print('center cropped widefield psf shape: ', wf_obs_cropped.shape)
 
-        imwrite('psf/examples/psf_data/widefield_excitation.tif', wf_ex_cropped)
-        imwrite('psf/examples/psf_data/widefield_detection.tif', wf_em_cropped)
-        imwrite('psf/examples/psf_data/widefield_effective.tif', wf_obs_cropped)
-        imwrite('psf/examples/psf_data/confocal_excitation.tif', conf_ex_cropped)
-        imwrite('psf/examples/psf_data/confocal_emission.tif', conf_em_cropped)
-        imwrite('psf/examples/psf_data/confocal_psf.tif', conf_obs_cropped)
+        imwrite('psf/examples/psf_data/widefield_excitation.tif', wf_ex_cropped.astype(numpy.float32), imagej=True)
+        imwrite('psf/examples/psf_data/widefield_detection.tif', wf_em_cropped.astype(numpy.float32), imagej=True)
+        imwrite('psf/examples/psf_data/widefield_effective.tif', wf_obs_cropped.astype(numpy.float32), imagej=True)
+        imwrite('psf/examples/psf_data/confocal_excitation.tif', conf_ex_cropped.astype(numpy.float32), imagej=True)
+        imwrite('psf/examples/psf_data/confocal_emission.tif', conf_em_cropped.astype(numpy.float32), imagej=True)
+        imwrite('psf/examples/psf_data/confocal_psf.tif', conf_obs_cropped.astype(numpy.float32), imagej=True)
         
         print(f'PSF saved with NA={na:.3f}, n={ri:.3f}')
         print('Confocal (3D): confocal_excitation.tif, confocal_emission.tif, confocal_psf.tif')
