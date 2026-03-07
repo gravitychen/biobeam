@@ -5,4 +5,5 @@ biobeam.egg-info/
 dist/
 build/
 *.tif
+.worktrees/
 
