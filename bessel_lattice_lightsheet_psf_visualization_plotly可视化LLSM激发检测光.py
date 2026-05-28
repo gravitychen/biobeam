@@ -203,18 +203,23 @@ print(f"Effective PSF 形状: {psf_effective.shape}")
 print(f"Effective PSF 最大值: {psf_effective.max():.4f}")
 print(f"Effective PSF 最小值: {psf_effective.min():.4f}")
 
-# 保存 Effective PSF 到文件
-import os
-from tifffile import imwrite
+# # ---------------------------------------------
+# # 保存 Effective PSF 到文件
+# # ---------------------------------------------
+# import os
+# from tifffile import imwrite
 
-psfdata_dir = 'psfdata'
-os.makedirs(psfdata_dir, exist_ok=True)
-output_file = os.path.join(psfdata_dir, 'bessel_lattice_lightsheet_effective_psf.tif')
-print(f"正在保存 Effective PSF 到: {output_file}")
-imwrite(output_file, psf_effective.astype(np.float32),imagej=True)
-print(f"保存完成！文件: {output_file}")
+# psfdata_dir = 'psfdata'
+# os.makedirs(psfdata_dir, exist_ok=True)
+# output_file = os.path.join(psfdata_dir, 'bessel_lattice_lightsheet_effective_psf.tif')
+# print(f"正在保存 Effective PSF 到: {output_file}")
+# imwrite(output_file, psf_effective.astype(np.float32),imagej=True)
+# print(f"保存完成！文件: {output_file}")
 
-assert 1==2
+# assert 1==2
+# # ---------------------------------------------
+
+
 # ## 4. 可视化 PSF - 3x2 组合可视化
 # 
 # 创建一个 3x2 的子图布局：
