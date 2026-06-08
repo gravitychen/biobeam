@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.degruyterbrill.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(pip show:*)",
+      "Bash(where jupyter:*)",
+      "Bash(jupyter:*)",
+      "Bash(python:*)",
+      "Bash(conda run:*)",
+      "Bash(C:\\\\Application\\\\Miniconda\\\\python.exe:*)",
+      "Bash(\"/c/Application/Miniconda/python.exe\":*)",
+      "Bash(git check-ignore:*)",
+      "Bash(npx create-video@latest:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx remotion:*)",
+      "Bash(git:*)",
+      "Bash(npm start:*)",
+      "Bash(npx skills:*)"
+    ]
+  }
+}
