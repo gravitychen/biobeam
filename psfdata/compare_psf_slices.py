@@ -1,118 +1,134 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # PSF 截面比较可视化
-# 
-# 本脚本用于加载和比较不同 PSF 的 XY 和 XZ 截面
+"""Compare all PSF TIFF files used in the BioBeam experiments.
 
-import numpy as np
+The script normalizes each PSF, aligns its peak to the volume center, center-crops
+all volumes to the same shape, and saves a center-slice comparison figure.
+"""
+
+from pathlib import Path
+
 import matplotlib.pyplot as plt
+import numpy as np
 from tifffile import imread
-import os
 
-# 设置字体为 Liberation
-plt.rcParams['font.sans-serif'] = ['Liberation Sans', 'Liberation Serif', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
 
-# PSF 文件路径
-psf_files = {
-    'Cylindrical Lightsheet': 'cylindrical_lightsheet_effective_psf.tif',
-    'Bessel Lattice Lightsheet': 'bessel_lattice_lightsheet_effective_psf.tif',
-    'Confocal': 'confocal_psf.tif',
-    'Widefield': 'widefield_effective.tif'
+SCRIPT_DIR = Path(__file__).resolve().parent
+OUTPUT_PATH = SCRIPT_DIR / "psf_slices_comparison.png"
+
+PSF_FILES = {
+    "cylindrical lightsheet": SCRIPT_DIR / "cylindrical_lightsheet_effective_psf.tif",
+    "old bessel lattice": SCRIPT_DIR / "bessel_lattice_lightsheet_effective_psf.tif",
+    "current cell11 lattice": SCRIPT_DIR / "cell11_current_biobeam_effective_psf.tif",
+    "measured LLSM": SCRIPT_DIR / "20220329_488_square_0p55-0p50.tif",
+    "confocal": SCRIPT_DIR / "confocal_psf.tif",
+    "widefield": SCRIPT_DIR / "widefield_effective.tif",
 }
 
-# 获取脚本所在目录
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
-print("正在加载 PSF 数据...")
-psf_data = {}
-for name, filename in psf_files.items():
-    filepath = os.path.join(script_dir, filename)
-    if os.path.exists(filepath):
-        print(f"加载 {name}: {filepath}")
-        psf = imread(filepath)
-        print(f"  {name} 形状: {psf.shape}")
-        print(f"  {name} 最大值: {psf.max():.4f}")
-        psf_normalized = psf / psf.max()
-        psf_data[name] = psf_normalized
-    else:
-        print(f"警告: 文件不存在 {filepath}")
+def normalize_volume(volume):
+    vol = np.asarray(volume, dtype=np.float32)
+    vol = np.nan_to_num(vol, nan=0.0, posinf=0.0, neginf=0.0)
+    vol = np.maximum(vol, 0.0)
+    vmax = float(np.max(vol))
+    return vol / vmax if vmax > 0 else np.zeros_like(vol, dtype=np.float32)
 
-if not psf_data:
-    print("错误: 没有找到任何 PSF 文件！")
-    exit(1)
 
-# 提取中心切片
-print("\n正在提取中心切片...")
-slices_xy = {}
-slices_xz = {}
+def center_peak(volume):
+    vol = np.asarray(volume, dtype=np.float32)
+    if vol.size == 0 or float(np.max(vol)) <= 0:
+        return vol
+    peak = np.array(np.unravel_index(np.argmax(vol), vol.shape))
+    center = np.array(vol.shape) // 2
+    return np.roll(vol, tuple(int(v) for v in center - peak), axis=(0, 1, 2))
 
-for name, psf in psf_data.items():
-    # PSF 数据形状为 (Nz, Ny, Nx)，即 (Z, Y, X)
-    Nz, Ny, Nx = psf.shape
-    center_z = Nz // 2  # Z 方向的中心（光轴中心）
-    center_y = Ny // 2  # Y 方向的中心
-    
-    # XY 平面：固定 Z（光轴），取 (Y, X)
-    slice_xy = psf[center_z, :, :]
-    # XZ 平面：固定 Y，取 (Z, X)
-    slice_xz = psf[:, center_y, :]
-    
-    # 先应用 log1p 变换，然后 Min-Max 归一化到 0-1 范围
-    def min_max_norm(data):
-        data_min = data.min()
-        data_max = data.max()
-        if data_max > data_min:
-            return (data - data_min) / (data_max - data_min)
-        else:
-            return data
-    
-    # 先 log1p，再归一化
-    slice_xy_log = np.log1p(slice_xy)
-    slice_xz_log = np.log1p(slice_xz)
-    slices_xy[name] = min_max_norm(slice_xy_log)
-    slices_xz[name] = min_max_norm(slice_xz_log)
-    print(f"{name}:")
-    print(f"  XY 截面形状: {slice_xy.shape}")
-    print(f"  XZ 截面形状: {slice_xz.shape}")
 
-# 创建比较可视化
-print("\n正在生成比较可视化...")
+def center_crop_to_shape(volume, target_shape):
+    slices = []
+    for source, target in zip(volume.shape, target_shape):
+        width = min(int(source), int(target))
+        start = max((int(source) - width) // 2, 0)
+        slices.append(slice(start, start + width))
+    return volume[tuple(slices)]
 
-n_psfs = len(psf_data)
-fig, axes = plt.subplots(2, n_psfs, figsize=(5*n_psfs, 10))
 
-# 设置颜色范围（已归一化到 0-1，直接使用 1.0）
-vmax_xy_norm = 1.0
-vmax_xz_norm = 1.0
+def load_psfs():
+    psfs = {}
+    metadata = {}
+    for name, path in PSF_FILES.items():
+        if not path.exists():
+            raise FileNotFoundError(f"Missing {name}: {path}")
+        raw = imread(path)
+        psfs[name] = center_peak(normalize_volume(raw))
+        metadata[name] = {
+            "filename": path.name,
+            "raw_shape": tuple(int(v) for v in raw.shape),
+            "dtype": str(raw.dtype),
+        }
+        print(f"{name}: {path.name}, raw shape={tuple(raw.shape)}, dtype={raw.dtype}")
+    return psfs, metadata
 
-for idx, (name, psf) in enumerate(psf_data.items()):
-    # XY 截面（第一行）
-    ax_xy = axes[0, idx]
-    im_xy = ax_xy.imshow(slices_xy[name], cmap='turbo', vmax=vmax_xy_norm, aspect='auto', origin='lower')
-    ax_xy.set_title(f'{name} PSF\nXY Slice', fontsize=12, fontweight='bold')
-    ax_xy.set_xlabel('X (pixels)')
-    ax_xy.set_ylabel('Y (pixels)')
-    plt.colorbar(im_xy, ax=ax_xy, fraction=0.046, pad=0.04, label='Normalized Intensity (0-1)')
-    
-    # XZ 截面（第二行）
-    ax_xz = axes[1, idx]
-    im_xz = ax_xz.imshow(slices_xz[name], cmap='turbo', vmax=vmax_xz_norm, aspect='auto', origin='lower')
-    ax_xz.set_title(f'XZ Slice', fontsize=12, fontweight='bold')
-    ax_xz.set_xlabel('X (pixels)')
-    ax_xz.set_ylabel('Z (pixels)')
-    plt.colorbar(im_xz, ax=ax_xz, fraction=0.046, pad=0.04, label='Normalized Intensity (0-1)')
 
-plt.tight_layout()
-# plt.suptitle('PSF Slice Comparison - Detection Objective Coordinate System (Log1p + Min-Max Normalized 0-1)\nZ is optical axis, XY is lateral plane', 
-#              fontsize=14, y=0.995)
+def crop_all_to_common_shape(psfs):
+    target_shape = tuple(
+        min(int(volume.shape[axis]) for volume in psfs.values())
+        for axis in range(3)
+    )
+    cropped = {
+        name: center_crop_to_shape(volume, target_shape)
+        for name, volume in psfs.items()
+    }
+    print(f"Common center-cropped shape: {target_shape}")
+    return cropped
 
-# 保存图像
-output_file = os.path.join(script_dir, 'psf_slices_comparison.png')
-plt.savefig(output_file, dpi=150, bbox_inches='tight')
-print(f"\n比较图像已保存到: {output_file}")
 
-plt.show()
-print("可视化完成！")
+def plot_center_slices(psfs, metadata):
+    planes = [
+        ("XY center", lambda vol, z, y, x: vol[z, :, :]),
+        ("XZ center", lambda vol, z, y, x: vol[:, y, :]),
+        ("YZ center", lambda vol, z, y, x: vol[:, :, x]),
+    ]
 
+    fig, axes = plt.subplots(3, len(psfs), figsize=(4.0 * len(psfs), 10), dpi=160)
+    if len(psfs) == 1:
+        axes = axes[:, np.newaxis]
+
+    for col, (name, volume) in enumerate(psfs.items()):
+        zc, yc, xc = [int(size // 2) for size in volume.shape]
+        for row, (plane_name, extract) in enumerate(planes):
+            ax = axes[row, col]
+            ax.imshow(
+                extract(volume, zc, yc, xc),
+                origin="lower",
+                cmap="magma",
+                vmin=0,
+                vmax=1,
+                interpolation="nearest",
+            )
+            if row == 0:
+                raw_shape = metadata[name]["raw_shape"]
+                ax.set_title(
+                    f"{name}\nraw {raw_shape}\ncrop {tuple(volume.shape)}",
+                    fontsize=9,
+                )
+            if col == 0:
+                ax.set_ylabel(plane_name, fontsize=10)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    fig.tight_layout()
+    return fig
+
+
+def main():
+    psfs, metadata = load_psfs()
+    psfs = crop_all_to_common_shape(psfs)
+    fig = plot_center_slices(psfs, metadata)
+    fig.savefig(OUTPUT_PATH, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved comparison figure: {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
