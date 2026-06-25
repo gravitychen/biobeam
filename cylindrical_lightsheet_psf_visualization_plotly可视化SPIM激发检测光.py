@@ -50,7 +50,7 @@ n0 = 1.33                # 介质折射率
 
 # 检测参数
 lam_detection = 0.525    # 检测波长（微米）
-NA_detection = 0.9       # 检测数值孔径
+NA_detection = 1.10      # 检测数值孔径
 
 print("参数设置完成")
 print(f"形状: {shape}")

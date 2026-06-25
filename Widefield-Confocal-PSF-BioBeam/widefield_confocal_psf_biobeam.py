@@ -4,8 +4,8 @@
 Widefield and Confocal PSF via BioBeam Vectorial Debye-Wolf Integration
 
 Uses focus_field_beam() (Richards-Wolf 1959 + Foreman & Toeroek 2011) to compute:
-  - Widefield PSF  = PSF_detection(lam=0.525, NA=0.9)
-  - Confocal PSF   = PSF_excitation(lam=0.488, NA=0.9) x PSF_detection(lam=0.525, NA=0.9)
+  - Widefield PSF  = PSF_detection(lam=0.525, NA=1.10)
+  - Confocal PSF   = PSF_excitation(lam=0.488, NA=1.10) x PSF_detection(lam=0.525, NA=1.10)
 
 Hardware parameters consistent with the rest of the biobeam project.
 """
@@ -28,6 +28,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from tifffile import imwrite
 
 from biobeam.core.focus_field_beam import focus_field_beam
 
@@ -36,13 +37,14 @@ from biobeam.core.focus_field_beam import focus_field_beam
 # ---------------------------------------------------------------------------
 shape  = (52, 52, 52)        # (Nx, Ny, Nz) — even values required by focus_field_beam
 units  = (0.1, 0.1, 0.1)    # (dx, dy, dz) in microns => FOV ≈ 5.2 x 5.2 x 5.2 um
-NA     = 0.9                 # shared objective NA (excitation & detection)
+NA     = 1.10                # shared objective NA (excitation & detection)
 n0     = 1.33                # water immersion
 lam_exc = 0.488              # excitation wavelength (um)
 lam_em  = 0.525              # emission / detection wavelength (um)
 n_steps = 200                # Debye-Wolf integration steps
 
 out_dir = os.path.dirname(os.path.abspath(__file__))
+psfdata_dir = os.path.join(_repo_root, "psfdata")
 
 # ---------------------------------------------------------------------------
 # 1. Compute PSFs
@@ -72,6 +74,14 @@ psf_confocal = psf_confocal_raw / psf_confocal_raw.max()
 
 print(f"Widefield PSF  shape={psf_widefield.shape}  range=[{psf_widefield.min():.3f}, {psf_widefield.max():.3f}]")
 print(f"Confocal PSF   shape={psf_confocal.shape}   range=[{psf_confocal.min():.3f}, {psf_confocal.max():.3f}]")
+
+os.makedirs(psfdata_dir, exist_ok=True)
+widefield_out = os.path.join(psfdata_dir, "widefield_effective.tif")
+confocal_out = os.path.join(psfdata_dir, "confocal_psf.tif")
+imwrite(widefield_out, psf_widefield.astype(np.float32), imagej=True)
+imwrite(confocal_out, psf_confocal.astype(np.float32), imagej=True)
+print(f"Saved widefield PSF: {widefield_out}")
+print(f"Saved confocal PSF: {confocal_out}")
 
 # ---------------------------------------------------------------------------
 # 2. Helper: FWHM from a 1-D profile
