@@ -171,7 +171,7 @@ def _(cell11, mo, old_psf_raw):
     inner_na = mo.ui.slider(0.10, 0.95, step=0.005, value=float(cell11["annular_inner_na"]), label="NA1 inner", show_value=True)
     outer_na = mo.ui.slider(0.11, 1.20, step=0.005, value=float(cell11["annular_outer_na"]), label="NA2 outer", show_value=True)
     exc_obj_na = mo.ui.slider(0.30, 1.20, step=0.01, value=float(cell11["excitation_objective_na"]), label="excitation objective NA cap", show_value=True)
-    sigma = mo.ui.slider(0.01, 0.50, step=0.01, value=0.10, label="sigma", show_value=True)
+    sigma = mo.ui.slider(0.01, 0.50, step=0.01, value=0.30, label="sigma", show_value=True)
     kpoints = mo.ui.slider(3, 24, step=1, value=4, label="BioBeam kpoints (4=square)", show_value=True)
     use_cell11_beams_as_kpoints = mo.ui.checkbox(value=False, label="use cell11 # beams as kpoints")
 
