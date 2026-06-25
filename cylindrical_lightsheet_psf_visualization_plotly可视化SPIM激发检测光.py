@@ -34,7 +34,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from scipy.ndimage import rotate
+from scipy.ndimage import gaussian_filter, rotate
 from biobeam.core.focus_field_cylindrical import focus_field_cylindrical
 from biobeam.core.focus_field_beam import focus_field_beam
 
@@ -45,7 +45,7 @@ units = (0.1, 0.1, 0.1)  # (dx, dy, dz) 单位：微米
 
 # 激发参数
 lam_excitation = 0.488  # 激发波长（微米）
-NA_excitation = 0.2      # 激发数值孔径
+NA_excitation = 0.08     # 激发数值孔径
 n0 = 1.33                # 介质折射率
 
 # 检测参数
@@ -146,6 +146,12 @@ print("说明：Excitation PSF 现在在 Detection Objective 坐标系中，Y �
 # Detection PSF: Z 是光轴
 # Excitation PSF: Y 是传播方向，与 Z 轴正交
 psf_effective = psf_excitation_det_coords * psf_detection
+SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS = 2.0
+psf_effective = gaussian_filter(
+    psf_effective,
+    sigma=(SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS, 0, 0),
+)
+print(f"Applied SPIM equivalent axial system blur: sigma_z={SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS} px")
 
 # 更新变量名，使用统一坐标系后的数据
 psf_excitation = psf_excitation_det_coords
