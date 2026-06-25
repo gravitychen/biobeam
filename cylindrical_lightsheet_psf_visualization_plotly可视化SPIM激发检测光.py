@@ -34,8 +34,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from scipy.ndimage import gaussian_filter, rotate
-from biobeam.core.focus_field_cylindrical import focus_field_cylindrical
+from scipy.ndimage import rotate
 from biobeam.core.focus_field_beam import focus_field_beam
 
 # 设置参数
@@ -51,6 +50,7 @@ n0 = 1.33                # 介质折射率
 # 检测参数
 lam_detection = 0.525    # 检测波长（微米）
 NA_detection = 1.10      # 检测数值孔径
+GAUSSIAN_SHEET_WAIST_UM = 1.60
 
 print("参数设置完成")
 print(f"形状: {shape}")
@@ -65,20 +65,30 @@ print(f"检测: λ={lam_detection} μm, NA={NA_detection}")
 # In[33]:
 
 
-print("正在计算 Excitation PSF (Cylindrical Lens)...")
-psf_excitation = focus_field_cylindrical(
-    shape=shape,
-    units=units,
-    lam=lam_excitation,
-    NA=NA_excitation,
-    n0=n0,
-    return_all_fields=False,
-    n_integration_steps=200
+print("正在生成 explicit Gaussian excitation sheet...")
+z_um = (np.arange(shape[0], dtype=np.float32) - shape[0] // 2) * units[0]
+y_um = (np.arange(shape[1], dtype=np.float32) - shape[1] // 2) * units[1]
+GAUSSIAN_SHEET_RAYLEIGH_RANGE_UM = (
+    np.pi * n0 * GAUSSIAN_SHEET_WAIST_UM ** 2 / lam_excitation
 )
+sheet_waist_y_um = GAUSSIAN_SHEET_WAIST_UM * np.sqrt(
+    1.0 + (y_um[None, :, None] / GAUSSIAN_SHEET_RAYLEIGH_RANGE_UM) ** 2
+)
+psf_excitation = np.exp(
+    -2.0 * (z_um[:, None, None] ** 2) / (sheet_waist_y_um ** 2)
+).astype(np.float32)
+psf_excitation = np.broadcast_to(psf_excitation, shape).astype(np.float32)
+sheet_fwhm_um = GAUSSIAN_SHEET_WAIST_UM * np.sqrt(2.0 * np.log(2.0))
 
 print(f"Excitation PSF 形状: {psf_excitation.shape}")
 print(f"Excitation PSF 最大值: {psf_excitation.max():.4f}")
 print(f"Excitation PSF 最小值: {psf_excitation.min():.4f}")
+print(
+    "Gaussian excitation sheet: "
+    f"waist_1e2={GAUSSIAN_SHEET_WAIST_UM:.2f} μm, "
+    f"center_intensity_FWHM={sheet_fwhm_um:.3f} μm, "
+    f"rayleigh_range={GAUSSIAN_SHEET_RAYLEIGH_RANGE_UM:.3f} μm"
+)
 
 
 # ## 2. 计算 Detection PSF (普通光束)
@@ -134,24 +144,14 @@ print(f"Detection PSF 形状: {psf_detection.shape} (已在 Detection Objective 
 # 将 Excitation PSF 转换到 Detection Objective 坐标系
 # Excitation 原本：X 是传播方向（axis 2），需要转到 Y 方向（axis 1）
 # 方法：交换 X 和 Y 轴
-print(f"Excitation PSF 原始形状: {psf_excitation.shape}")
-print("正在将 Excitation PSF 从 (X 传播方向) 转换到 (Y 传播方向)...")
-# 交换 axis 1 (Y) 和 axis 2 (X)
-psf_excitation_det_coords = np.swapaxes(psf_excitation, 0, 1)
-# psf_excitation_det_coords = psf_excitation
-print(f"转换后 Excitation PSF 形状: {psf_excitation_det_coords.shape}")
-print("说明：Excitation PSF 现在在 Detection Objective 坐标系中，Y 是传播方向，XZ 是横向平面")
+print(f"Excitation PSF 形状: {psf_excitation.shape} (已在 Detection Objective 坐标系中)")
+psf_excitation_det_coords = psf_excitation.astype(np.float32)
+print("说明：Excitation sheet 由 Z 方向 waist 显式定义，不再对 final PSF 做 Gaussian blur")
 
 # 现在在统一的坐标系中计算 Effective PSF
 # Detection PSF: Z 是光轴
 # Excitation PSF: Y 是传播方向，与 Z 轴正交
 psf_effective = psf_excitation_det_coords * psf_detection
-SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS = 2.0
-psf_effective = gaussian_filter(
-    psf_effective,
-    sigma=(SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS, 0, 0),
-)
-print(f"Applied SPIM equivalent axial system blur: sigma_z={SPIM_AXIAL_SYSTEM_SIGMA_Z_PIXELS} px")
 
 # 更新变量名，使用统一坐标系后的数据
 psf_excitation = psf_excitation_det_coords
@@ -171,7 +171,7 @@ print(f"正在保存 Effective PSF 到: {output_file}")
 imwrite(output_file, psf_effective.astype(np.float32),imagej=True)
 print(f"保存完成！文件: {output_file}")
 
-assert 1==2
+raise SystemExit(0)
 
 
 # ## 4. 可视化 PSF - 3x2 组合可视化
