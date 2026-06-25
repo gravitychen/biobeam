@@ -38,7 +38,17 @@ def _():
     from biobeam.core.focus_field_beam import focus_field_beam
     from biobeam.core.focus_field_lattice import focus_field_lattice
 
-    return Path, dedent, focus_field_beam, focus_field_lattice, mo, np, plt, re, tifffile
+    return (
+        Path,
+        dedent,
+        focus_field_beam,
+        focus_field_lattice,
+        mo,
+        np,
+        plt,
+        re,
+        tifffile,
+    )
 
 
 @app.cell
@@ -50,17 +60,26 @@ def _(Path):
         r"d:\codes\biobeam\bessel_lattice_lightsheet_psf_visualization_plotly可视化LLSM激发检测光.py"
     )
     OLD_PSF_PATH = Path(
-        r"d:\codes\biobeam\psfdata\bessel_lattice_lightsheet_effective_psf.tif"
+        r"C:\Code\biobeam\psfdata\bessel_lattice_lightsheet_effective_psf.tif"
     )
     SAMPLE_PSF488_PATH = Path(
-        r"d:\codes\microscopy_proj\microscopy_data\Lattice_light_sheet_microscope_sample_data\PSF\PSF488.tif"
+        r"C:\Code\biobeam\psfdata\20220329_488_square_0p55-0p50.tif"
     )
-    return OLD_PSF_PATH, ORIGINAL_SCRIPT_PATH, SAMPLE_PSF488_PATH, SETTINGS_PATH
+    GENERATED_PSF_PATH = Path(
+        r"C:\Code\biobeam\psfdata\cell11_current_biobeam_effective_psf.tif"
+    )
+    return (
+        GENERATED_PSF_PATH,
+        OLD_PSF_PATH,
+        ORIGINAL_SCRIPT_PATH,
+        SAMPLE_PSF488_PATH,
+        SETTINGS_PATH,
+    )
 
 
 @app.cell
 def _(SETTINGS_PATH, re):
-    settings_text = SETTINGS_PATH.read_text(encoding="utf-8", errors="replace")
+    settings_text = SETTINGS_PATH.read_text(encoding="utf-8", errors="replace") if SETTINGS_PATH.exists() else ""
 
     def _float_after_equals(label, default):
         _match = re.search(rf"{re.escape(label)}\s*=\s*([-+0-9.]+)", settings_text)
@@ -86,7 +105,7 @@ def _(SETTINGS_PATH, re):
         "annular_inner_na": _float_after_equals("innerNA", 0.50),
         "annular_outer_na": _float_after_equals("outerNA", 0.55),
         "excitation_objective_na": _float_after_equals("Numerical Aperature", 0.80),
-        "detection_na": 0.90,
+        "detection_na": 1.10,
         "emission_nm": 525.0,
         "medium_ri": 1.33,
         "sample_stack_offset_um": _sample_stack_values[0] if len(_sample_stack_values) > 0 else 50.0,
@@ -128,7 +147,7 @@ def _(OLD_PSF_PATH, ORIGINAL_SCRIPT_PATH, SETTINGS_PATH, cell11, dedent, mo):
             - sample stack: offset `{cell11["sample_stack_offset_um"]:.1f} um`, interval `{cell11["sample_stack_interval_um"]:.3f} um`, pixels `{cell11["sample_stack_pixels"]}`
             - DOE metadata: installed `{cell11["doe_installed"]}`, beams `{cell11["doe_n_beams"]}`, spacing `{cell11["doe_beam_spacing_um"]:.3f} um`
 
-            注意：原始 BioBeam 脚本里面的 `kpoints` 不是 LLSPY 文件里的 `Beam spacing (um)`。这里默认仍保留原始脚本 `kpoints=6`，同时提供一个开关可以把 cell11 的 `# of beams=10` 暂时作为 `kpoints` 试算。
+            注意：原始 BioBeam 脚本里面的 `kpoints` 不是 LLSPY 文件里的 `Beam spacing (um)`。这里默认使用 `kpoints=4` 来表示 square lattice，同时提供一个开关可以把 cell11 的 `# of beams=10` 暂时作为 `kpoints` 试算。
             """
         ).strip()
     )
@@ -138,7 +157,8 @@ def _(OLD_PSF_PATH, ORIGINAL_SCRIPT_PATH, SETTINGS_PATH, cell11, dedent, mo):
 @app.cell
 def _(OLD_PSF_PATH, SAMPLE_PSF488_PATH, np, tifffile):
     old_psf_raw = tifffile.imread(OLD_PSF_PATH).astype(np.float32)
-    sample_psf488_raw = tifffile.imread(SAMPLE_PSF488_PATH).astype(np.float32)
+    _sample_psf488_path = SAMPLE_PSF488_PATH if SAMPLE_PSF488_PATH.exists() else OLD_PSF_PATH
+    sample_psf488_raw = tifffile.imread(_sample_psf488_path).astype(np.float32)
     return old_psf_raw, sample_psf488_raw
 
 
@@ -152,7 +172,7 @@ def _(cell11, mo, old_psf_raw):
     outer_na = mo.ui.slider(0.11, 1.20, step=0.005, value=float(cell11["annular_outer_na"]), label="NA2 outer", show_value=True)
     exc_obj_na = mo.ui.slider(0.30, 1.20, step=0.01, value=float(cell11["excitation_objective_na"]), label="excitation objective NA cap", show_value=True)
     sigma = mo.ui.slider(0.01, 0.50, step=0.01, value=0.10, label="sigma", show_value=True)
-    kpoints = mo.ui.slider(3, 24, step=1, value=6, label="BioBeam kpoints", show_value=True)
+    kpoints = mo.ui.slider(3, 24, step=1, value=4, label="BioBeam kpoints (4=square)", show_value=True)
     use_cell11_beams_as_kpoints = mo.ui.checkbox(value=False, label="use cell11 # beams as kpoints")
 
     det_wavelength_nm = mo.ui.slider(500, 700, step=1, value=int(round(cell11["emission_nm"])), label="detection wavelength nm", show_value=True)
@@ -300,7 +320,15 @@ def _(
         "dither_step_pixels": used_dither_step,
         "scan_positions": len(_scan_positions),
     }
-    return psf_detection, psf_effective_cell11, psf_excitation_det_coords, psf_excitation_lightsheet, psf_excitation_raw, sim_info
+    return psf_effective_cell11, sim_info
+
+
+@app.cell
+def _(GENERATED_PSF_PATH, psf_effective_cell11, tifffile):
+    GENERATED_PSF_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tifffile.imwrite(GENERATED_PSF_PATH, psf_effective_cell11.astype("float32"), imagej=True)
+    SAVED_PSF_PATH = GENERATED_PSF_PATH
+    return (SAVED_PSF_PATH,)
 
 
 @app.cell
@@ -364,27 +392,34 @@ def _(
         sample488_norm = center_peak(sample488_norm)
     cell11_matched, old_matched = center_crop_pair(cell11_norm, old_norm)
     cell11_matched_sample488, sample488_matched = center_crop_pair(cell11_norm, sample488_norm)
+    old_matched_sample488_for_slices, sample488_matched_old_for_slices = center_crop_pair(old_norm, sample488_norm)
     diff = cell11_matched - old_matched
     abs_diff = abs(diff)
     diff_sample488 = cell11_matched_sample488 - sample488_matched
     abs_diff_sample488 = abs(diff_sample488)
+    diff_old_sample488_for_slices = old_matched_sample488_for_slices - sample488_matched_old_for_slices
+    abs_diff_old_sample488_for_slices = abs(diff_old_sample488_for_slices)
     return (
-        abs_diff,
+        abs_diff_old_sample488_for_slices,
         abs_diff_sample488,
         cell11_matched,
         cell11_matched_sample488,
         cell11_norm,
         diff,
+        diff_old_sample488_for_slices,
         diff_sample488,
         old_matched,
+        old_matched_sample488_for_slices,
         old_norm,
         sample488_matched,
+        sample488_matched_old_for_slices,
         sample488_norm,
     )
 
 
 @app.cell
 def _(
+    SAVED_PSF_PATH,
     cell11_matched,
     cell11_matched_sample488,
     fwhm_pixels,
@@ -426,26 +461,45 @@ def _(
 
     metrics_table = [
         {"Reference": "simulation", "Metric": "Generated raw shape", "Value": str(tuple(int(_v) for _v in psf_effective_cell11.shape))},
+        {"Reference": "simulation", "Metric": "Saved generated PSF", "Value": str(SAVED_PSF_PATH)},
         {"Reference": "simulation", "Metric": "Simulation parameters", "Value": str(sim_info)},
+        {"Reference": "parameter comparison", "Metric": "Old BioBeam NA1 / NA2 / kpoints", "Value": "0.440 / 0.580 / 6"},
+        {
+            "Reference": "parameter comparison",
+            "Metric": "Current simulated NA1 / NA2 / kpoints",
+            "Value": f"{sim_info['NA1_excitation']:.3f} / {sim_info['NA2_excitation_after_objective_cap']:.3f} / {sim_info['kpoints']}",
+        },
+        {
+            "Reference": "parameter comparison",
+            "Metric": "Current lattice geometry",
+            "Value": "square lattice" if int(sim_info["kpoints"]) == 4 else f"kpoints={sim_info['kpoints']}",
+        },
     ]
     metrics_table.extend(_rows_for_reference("old BioBeam PSF", cell11_matched, old_matched, old_psf_raw))
-    metrics_table.extend(_rows_for_reference("sample PSF488", cell11_matched_sample488, sample488_matched, sample_psf488_raw))
+    metrics_table.extend(_rows_for_reference("measured LLSM PSF", cell11_matched_sample488, sample488_matched, sample_psf488_raw))
     return (metrics_table,)
 
 
 @app.cell
-def _(abs_diff, cell11_matched, diff, np, old_matched, plt):
-    _zc, _yc, _xc = [int(_s // 2) for _s in cell11_matched.shape]
+def _(
+    abs_diff_old_sample488_for_slices,
+    diff_old_sample488_for_slices,
+    np,
+    old_matched_sample488_for_slices,
+    plt,
+    sample488_matched_old_for_slices,
+):
+    _zc, _yc, _xc = [int(_s // 2) for _s in old_matched_sample488_for_slices.shape]
     _panels = [
-        ("XY center z", cell11_matched[_zc], old_matched[_zc], diff[_zc], abs_diff[_zc]),
-        ("XZ center y", cell11_matched[:, _yc, :], old_matched[:, _yc, :], diff[:, _yc, :], abs_diff[:, _yc, :]),
-        ("YZ center x", cell11_matched[:, :, _xc], old_matched[:, :, _xc], diff[:, :, _xc], abs_diff[:, :, _xc]),
+        ("XY center z", old_matched_sample488_for_slices[_zc], sample488_matched_old_for_slices[_zc], diff_old_sample488_for_slices[_zc], abs_diff_old_sample488_for_slices[_zc]),
+        ("XZ center y", old_matched_sample488_for_slices[:, _yc, :], sample488_matched_old_for_slices[:, _yc, :], diff_old_sample488_for_slices[:, _yc, :], abs_diff_old_sample488_for_slices[:, _yc, :]),
+        ("YZ center x", old_matched_sample488_for_slices[:, :, _xc], sample488_matched_old_for_slices[:, :, _xc], diff_old_sample488_for_slices[:, :, _xc], abs_diff_old_sample488_for_slices[:, :, _xc]),
     ]
     fig_slices, _axes = plt.subplots(3, 4, figsize=(17, 12))
-    _columns = ["cell11 generated on old grid", "old PSF", "signed diff", "abs diff"]
-    _vmax = max(float(np.max(cell11_matched)), float(np.max(old_matched)), 1e-9)
-    _diff_lim = max(abs(float(np.min(diff))), abs(float(np.max(diff))), 1e-9)
-    _abs_vmax = max(float(np.max(abs_diff)), 1e-9)
+    _columns = ["old simulated PSF", "measured LLSM PSF", "signed diff", "abs diff"]
+    _vmax = max(float(np.max(old_matched_sample488_for_slices)), float(np.max(sample488_matched_old_for_slices)), 1e-9)
+    _diff_lim = max(abs(float(np.min(diff_old_sample488_for_slices))), abs(float(np.max(diff_old_sample488_for_slices))), 1e-9)
+    _abs_vmax = max(float(np.max(abs_diff_old_sample488_for_slices)), 1e-9)
     for _row, (_title, _gen_slice, _old_slice, _diff_slice, _abs_slice) in enumerate(_panels):
         for _col, _image in enumerate([_gen_slice, _old_slice, _diff_slice, _abs_slice]):
             _ax = _axes[_row, _col]
@@ -488,7 +542,7 @@ def _(cell11_matched, old_matched, plt):
 
 
 @app.cell
-def _(cell11_matched, diff, np, old_matched, plt):
+def _(cell11_matched, diff, old_matched, plt):
     _gen_flat = cell11_matched.ravel()
     _old_flat = old_matched.ravel()
     _diff_flat = diff.ravel()
@@ -498,7 +552,7 @@ def _(cell11_matched, diff, np, old_matched, plt):
     _lim = max(float(_old_flat.max()), float(_gen_flat.max()), 1e-9)
     _axes[0].plot([0, _lim], [0, _lim], color="black", linewidth=1)
     _axes[0].set_title("voxel scatter")
-    _axes[0].set_xlabel("old PSF")
+    _axes[0].set_xlabel("Old PSF")
     _axes[0].set_ylabel("cell11 generated")
     _axes[0].grid(alpha=0.25)
     _axes[1].hist(_diff_flat, bins=80, color="#5b7c99", alpha=0.85)
@@ -511,7 +565,14 @@ def _(cell11_matched, diff, np, old_matched, plt):
 
 
 @app.cell
-def _(abs_diff_sample488, cell11_matched_sample488, diff_sample488, np, plt, sample488_matched):
+def _(
+    abs_diff_sample488,
+    cell11_matched_sample488,
+    diff_sample488,
+    np,
+    plt,
+    sample488_matched,
+):
     _zc, _yc, _xc = [int(_s // 2) for _s in cell11_matched_sample488.shape]
     _panels = [
         ("XY center z", cell11_matched_sample488[_zc], sample488_matched[_zc], diff_sample488[_zc], abs_diff_sample488[_zc]),
@@ -519,7 +580,7 @@ def _(abs_diff_sample488, cell11_matched_sample488, diff_sample488, np, plt, sam
         ("YZ center x", cell11_matched_sample488[:, :, _xc], sample488_matched[:, :, _xc], diff_sample488[:, :, _xc], abs_diff_sample488[:, :, _xc]),
     ]
     fig_slices_sample488, _axes = plt.subplots(3, 4, figsize=(17, 12))
-    _columns = ["cell11 generated center-cropped", "sample PSF488", "signed diff", "abs diff"]
+    _columns = ["New PSF based on cell11 parameter", "Measured PSF", "signed diff", "abs diff"]
     _vmax = max(float(np.max(cell11_matched_sample488)), float(np.max(sample488_matched)), 1e-9)
     _diff_lim = max(abs(float(np.min(diff_sample488))), abs(float(np.max(diff_sample488))), 1e-9)
     _abs_vmax = max(float(np.max(abs_diff_sample488)), 1e-9)
@@ -554,7 +615,7 @@ def _(cell11_matched_sample488, plt, sample488_matched):
     fig_profiles_sample488, _axes = plt.subplots(1, 3, figsize=(15, 4))
     for _ax, (_title, _gen, _sample) in zip(_axes, _profiles):
         _ax.plot(_gen, label="cell11 generated", linewidth=2)
-        _ax.plot(_sample, label="sample PSF488", linewidth=2, linestyle="--")
+        _ax.plot(_sample, label="measured LLSM PSF", linewidth=2, linestyle="--")
         _ax.set_title(_title)
         _ax.set_xlabel("pixel")
         _ax.set_ylabel("normalized intensity")
@@ -565,7 +626,7 @@ def _(cell11_matched_sample488, plt, sample488_matched):
 
 
 @app.cell
-def _(cell11_matched_sample488, diff_sample488, np, plt, sample488_matched):
+def _(cell11_matched_sample488, diff_sample488, plt, sample488_matched):
     _gen_flat = cell11_matched_sample488.ravel()
     _sample_flat = sample488_matched.ravel()
     _diff_flat = diff_sample488.ravel()
@@ -575,16 +636,60 @@ def _(cell11_matched_sample488, diff_sample488, np, plt, sample488_matched):
     _lim = max(float(_sample_flat.max()), float(_gen_flat.max()), 1e-9)
     _axes[0].plot([0, _lim], [0, _lim], color="black", linewidth=1)
     _axes[0].set_title("voxel scatter")
-    _axes[0].set_xlabel("sample PSF488")
+    _axes[0].set_xlabel("measured LLSM PSF")
     _axes[0].set_ylabel("cell11 generated")
     _axes[0].grid(alpha=0.25)
     _axes[1].hist(_diff_flat, bins=80, color="#7a6f9b", alpha=0.85)
     _axes[1].set_title("signed difference histogram")
-    _axes[1].set_xlabel("cell11 generated - sample PSF488")
+    _axes[1].set_xlabel("cell11 generated - measured LLSM PSF")
     _axes[1].set_ylabel("voxel count")
     _axes[1].grid(alpha=0.25)
     fig_distribution_sample488.tight_layout()
     return (fig_distribution_sample488,)
+
+
+@app.cell
+def _(cell11_norm, old_norm, plt, sample488_norm):
+    _raw_volumes = [
+        ("old simulated PSF", old_norm),
+        ("current simulated PSF", cell11_norm),
+        ("measured LLSM PSF", sample488_norm),
+    ]
+    _target_shape = tuple(
+        min(int(_vol.shape[_axis]) for _, _vol in _raw_volumes)
+        for _axis in range(3)
+    )
+
+    def _center_crop_to_shape(_vol, _shape):
+        _slices = []
+        for _source, _target in zip(_vol.shape, _shape):
+            _start = max((int(_source) - int(_target)) // 2, 0)
+            _slices.append(slice(_start, _start + int(_target)))
+        return _vol[tuple(_slices)]
+
+    _volumes = [
+        (_name, _center_crop_to_shape(_vol, _target_shape))
+        for _name, _vol in _raw_volumes
+    ]
+    _planes = [
+        ("XY center", lambda _v, _z, _y, _x: _v[_z, :, :]),
+        ("XZ center", lambda _v, _z, _y, _x: _v[:, _y, :]),
+        ("YZ center", lambda _v, _z, _y, _x: _v[:, :, _x]),
+    ]
+    fig_three_way_psf, _axes = plt.subplots(3, 3, figsize=(12, 10))
+    for _col, (_name, _vol) in enumerate(_volumes):
+        _zc, _yc, _xc = [int(_s // 2) for _s in _vol.shape]
+        for _row, (_plane_name, _extract) in enumerate(_planes):
+            _ax = _axes[_row, _col]
+            _ax.imshow(_extract(_vol, _zc, _yc, _xc), origin="lower", cmap="magma", vmin=0, vmax=1, interpolation="nearest")
+            if _row == 0:
+                _ax.set_title(f"{_name}\ncenter-cropped {tuple(int(_s) for _s in _vol.shape)}")
+            if _col == 0:
+                _ax.set_ylabel(_plane_name)
+            _ax.set_xticks([])
+            _ax.set_yticks([])
+    fig_three_way_psf.tight_layout()
+    return (fig_three_way_psf,)
 
 
 @app.cell(hide_code=True)
@@ -596,6 +701,7 @@ def _(
     fig_profiles_sample488,
     fig_slices,
     fig_slices_sample488,
+    fig_three_way_psf,
     metrics_table,
     mo,
 ):
@@ -604,18 +710,20 @@ def _(
             controls,
             mo.md("## Numerical comparison"),
             mo.ui.table(metrics_table),
-            mo.md("## Old BioBeam PSF: center slices"),
+            mo.md("## Old simulated PSF vs measured LLSM PSF: center slices"),
             fig_slices,
             mo.md("## Old BioBeam PSF: center profiles"),
             fig_profiles,
             mo.md("## Old BioBeam PSF: voxel distribution"),
             fig_distribution,
-            mo.md("## Sample PSF488: center slices"),
+            mo.md("## Measured LLSM PSF: center slices"),
             fig_slices_sample488,
-            mo.md("## Sample PSF488: center profiles"),
+            mo.md("## Measured LLSM PSF: center profiles"),
             fig_profiles_sample488,
-            mo.md("## Sample PSF488: voxel distribution"),
+            mo.md("## Measured LLSM PSF: voxel distribution"),
             fig_distribution_sample488,
+            mo.md("## Three-way PSF image comparison"),
+            fig_three_way_psf,
         ]
     )
     return
